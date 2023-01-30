@@ -5,68 +5,69 @@ from pprint import pprint
 
 # PARAMS 
 # base directory of emoji files
-BASE_DIR = 'path/to/emoji_dir'
+BASE_DIR = '/path/to/emojis'
 # path to the zulip config file (zuliprc)
 ZULIPRC_PATH = '~/zuliprc'
 # print success message on successful emoji upload
 PRINT_ON_SUCCESS = True
 
 # preprocess the filename to emoji name
-# this example preprocesses the name of blob emojis,
-# downloaded from here : https://nqn.blue/packs/BlobEmoji
 def make_emoji_name(filename):
-    # strip extension
-    name = str(Path(filename).with_suffix(''))
+    return filename
 
-    if name.startswith('ablob'):
-        return name.replace('ablob', 'ablob ', 1)
-    elif name.startswith('blob'):
-        return name.replace('blob', 'ablob ', 1)
-    else:
-        return 'ablob_' + name
 
 ############################################################
 
 # get all emoji file list
-def read_files():
+# return list of tuples, (path, name)
+def get_emojis():
     # iterate over files
-    files = []
+    emojis = []
     for filename in os.listdir(BASE_DIR):
-        if os.path.isfile(filename):
-            files.append(filename)
+        path = os.path.join(BASE_DIR, filename)
+        if os.path.isfile(path):
+            emojis.append((path, filename))
 
     # filter out non-image files by extension(.gif, .png)
-    files = [f for f in files if (f.endswith('.gif') or f.endswith('.png'))]
+    emojis = [(path, make_emoji_name(name)) for (path, name) in emojis 
+             if (path.endswith('.gif') or path.endswith('.png'))]
 
-    return files
+    return emojis
 
 
 # add emojis to zulip server
-def upload_emoji_list(files):
+def upload_emoji_list(emojis):
     client = zulip.Client(config_file=ZULIPRC_PATH)
 
-    for filename in files:
-        # use function to make emojiname from filename
-        emoji_name = make_emoji_name(filename)
-
+    for (path, emoji_name) in emojis:
         # use zulip REST API to add
         # refer to https://zulip.com/api/upload-custom-emoji
-        with open(filename, "rb") as fp:
+        with open(path, "rb") as fp:
             result = client.call_endpoint(
                 f"realm/emoji/{emoji_name}",
                 method="POST",
                 files=[fp],
             )
             if result['result'] != 'success':
-                print('ERROR on uploading emoji file : ', filename)
+                print('ERROR on uploading emoji file: ', path)
                 print(result)
             else:
                 if PRINT_ON_SUCCESS:
-                    print('SUCCESS uploading emoji file : ', filename)
+                    print('SUCCESS uploading emoji file: ', path)
 
 ############################################################
 
 # main
 if __name__ == '__main__':
-    files = read_files()
-    upload_emoji_list(files)
+    emojis = get_emojis()
+
+    # prompt
+    print('Will upload emojis : ')
+    for s in [f"->Path: {str(path)}\n  Name: {name}\n" for (path, name) in emojis]:
+        print(s)
+
+    a = input("Type 'y' to continue, other to abort : ") 
+    if a == 'y':
+        upload_emoji_list(emojis)
+    else:
+        print('Aborting...')
